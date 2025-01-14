@@ -31,3 +31,20 @@ pub fn expand_user<P: AsRef<Path>>(path: P) -> PathBuf {
     path_buf
 }
 
+/// 地址强行转为 `String`
+///
+/// Examples
+///
+/// ```
+///
+/// use lazytool::path;
+///
+/// let s = path::must_to_string("/tmp/filter");
+/// assert_eq!(s, String::from("/tmp/filter"));
+/// ```
+pub fn must_to_string<P: AsRef<Path>>(path: P) -> String {
+    if let Some(s) = path.as_ref().to_str() {
+        return s.to_string();
+    }
+    String::new()
+}
