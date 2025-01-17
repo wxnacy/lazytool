@@ -48,3 +48,18 @@ pub fn must_to_string<P: AsRef<Path>>(path: P) -> String {
     }
     String::new()
 }
+
+/// 强行获取地址文件名
+///
+/// Examples
+///
+/// ```
+///
+/// use lazytool::path;
+///
+/// let s = path::must_get_filename("/tmp/filter.json");
+/// assert_eq!(s, String::from("filter.json"));
+/// ```
+pub fn must_get_filename<P: AsRef<Path>>(path: P) -> String {
+    path.as_ref().file_name().expect("Failed get filename").to_string_lossy().into_owned()
+}
