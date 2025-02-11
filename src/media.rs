@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow};
 use std::path::Path;
+use serde::Deserialize;
 
 use regex::Regex;
 
@@ -17,6 +18,18 @@ pub struct Episode {
 }
 
 impl Episode {
+    /// 静态匹配数据
+    pub const PARSERS: [(&str, [usize; 3]); 4] = [
+        // 匹配模式 1: /影片/电视剧/医馆笑传/医馆笑传S01.37集.1080P/01.mkv
+        (r"^(.*?)/([^/]+)S(\d{2})\.(\d{1,2})集\.(\d{4}P)/(\d{2})\.(\w+)$", [2, 3, 6]),
+        // 匹配模式 2: /还珠格格S01.国语中字.无台标.1080P/还珠格格S01E02.mp4
+        (r"^(.*?)/([^/]+)S(\d{2})E(\d{2})\.(\w+)$", [2, 3, 4]),
+        // 匹配模式 3: /Volumes/ZhiTai/影片/电视剧/爱情公寓/S4 (2014) 4K/01.mp4
+        (r"^(.*?)/([^/]+)/S(\d{1,2})\s+\(\d{4}\)\s+\d{1,2}K/(\d{2})\.(\w+)$", [2, 3, 4]),
+        // 匹配模式 4: /电视剧/龙门镖局/龙门镖局 (2013) 4K/龙门镖局.Longmen.Express.2013.E02.4K.2160p.HEVC.AAC-DHTCLUB.mp4
+        (r"/([^/]+)/([^/]+) \(.*\) .*E(\d{2})", [2, 0, 3]),
+    ];
+
     /// 从地址中解析剧集信息
     ///
     /// Examples
@@ -43,54 +56,73 @@ impl Episode {
     /// }
     /// ```
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Option<Self>> {
+        // 尝试匹配每个模式
+        let mut parsers = vec![];
+        for parser in Self::PARSERS {
+            parsers.push(RegexParser::new(parser.0, parser.1.to_vec()))
+        }
+        Self::from_path_with_regex(path, parsers)
+    }
+
+    pub fn from_path_with_regex<P, T>(path: P, parsers: Vec<T>) -> Result<Option<Self>>
+        where P: AsRef<Path>,
+              T: Parser,
+    {
 
         let path_str = path.as_ref().to_str().ok_or_else(|| anyhow!("Invalid path"))?;
 
         // 尝试匹配每个模式
-        if let Some(ep) = Self::match_pattern1(path_str) {
-            return Ok(Some(ep));
-        }
-        if let Some(ep) = Self::match_pattern2(path_str) {
-            return Ok(Some(ep));
+        for parser in parsers {
+            let item = parser.parse(path_str);
+            if item.is_some() {
+                return Ok(item);
+            }
         }
 
         // 配合文件夹名称
         Ok(None)
     }
 
+}
 
-    /// 匹配模式 1: /影片/电视剧/医馆笑传/医馆笑传S01.37集.1080P/01.mkv
-    fn match_pattern1(path: &str) -> Option<Self> {
-        let pattern = r"^(.*?)/([^/]+)S(\d{2})\.(\d{1,2})集\.(\d{4}P)/(\d{2})\.(\w+)$";
-        let indexs = vec![2, 3, 6];
-        Self::match_pattern(path, pattern, indexs)
+pub trait Parser {
+    fn parse(&self, path: &str) -> Option<Episode>;
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegexParser {
+    pattern: String,
+    indexes: Vec<usize>,
+}
+
+impl RegexParser {
+    pub fn new<P: AsRef<str>>(pattern: P, indexes: Vec<usize>) -> Self {
+        Self { pattern: pattern.as_ref().to_string(), indexes }
     }
+}
 
-    /// 匹配模式 2: /还珠格格S01.国语中字.无台标.1080P/还珠格格S01E02.mp4
-    fn match_pattern2(path: &str) -> Option<Self> {
-        let pattern = r"^(.*?)/([^/]+)S(\d{2})E(\d{2})\.(\w+)$";
-        let indexs = vec![2, 3, 4];
-        Self::match_pattern(path, pattern, indexs)
-    }
-
-    /// 匹配模式通用
-    /// /还珠格格S01.国语中字.无台标.1080P/还珠格格S01E02.mp4
-    fn match_pattern(path: &str, pattern: &str, indexs: Vec<usize>) -> Option<Self> {
-        let re = Regex::new(pattern).ok()?;
+impl Parser for RegexParser {
+    fn parse(&self, path: &str) -> Option<Episode> {
+        let re = Regex::new(&self.pattern).ok()?;
+        let indexs = self.indexes.clone();
         if let Some(caps) = re.captures(path) {
+            // println!("{caps:#?}");
             let title = &caps[indexs[0]]; // 剧名
-            let season = &caps[indexs[1]]; // 季数
+            let mut season = Some(1);
+            if indexs[1] != 0 {
+                let season_text = &caps[indexs[1]]; // 季数
+                season = season_text.parse().ok();
+            }
             let episode = &caps[indexs[2]]; // 集数
             Some(Episode {
                 title: Some(title.to_string()),
-                season: season.parse().ok(),
+                season,
                 episode: episode.parse().ok(),
             })
         } else {
             None
         }
     }
-
 }
 
 #[cfg(test)]
@@ -100,7 +132,7 @@ mod tests {
     #[test]
     fn test_match_pattern1() {
         let path = "/Volumes/Getea/影片/电视剧/医馆笑传/医馆笑传S01.37集.1080P/01.mp4";
-        let item = Episode::match_pattern1(path);
+        let item = Episode::from_path(path).unwrap();
         assert!(item.is_some());
         if let Some(ep) = item {
             assert_eq!(ep.title, Some("医馆笑传".to_string()));
@@ -112,7 +144,7 @@ mod tests {
     #[test]
     fn test_match_pattern2() {
         let path = "/Volumes/还珠格格S01.国语中字.无台标.1080P/还珠格格S01E02.mp4";
-        let item = Episode::match_pattern2(path);
+        let item = Episode::from_path(path).unwrap();
         println!("{item:?}");
         assert!(item.is_some());
         if let Some(ep) = item {
@@ -122,4 +154,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_match_pattern3() {
+        let path = "/Volumes/ZhiTai/影片/电视剧/爱情公寓/S2 (2011) 4K/02.mp4";
+        let item = Episode::from_path(path).unwrap();
+        assert!(item.is_some());
+        if let Some(ep) = item {
+            assert_eq!(ep.title, Some("爱情公寓".to_string()));
+            assert_eq!(ep.season, Some(2));
+            assert_eq!(ep.episode, Some(2));
+        }
+
+    }
+    #[test]
+    fn test_match_pattern4() {
+        let path = "/Volumes/ZhiTai/影片/电视剧/龙门镖局/龙门镖局 (2013) 4K/龙门镖局.Longmen.Express.2013.E02.4K.2160p.HEVC.AAC-DHTCLUB.mp4";
+        let item = Episode::from_path(path).unwrap();
+        assert!(item.is_some());
+        if let Some(ep) = item {
+            assert_eq!(ep.title, Some("龙门镖局".to_string()));
+            assert_eq!(ep.season, Some(1)); // 默认季数为1
+            assert_eq!(ep.episode, Some(2));
+        }
+    }
 }

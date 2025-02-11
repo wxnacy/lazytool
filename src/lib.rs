@@ -7,4 +7,4 @@ pub use time::{
     current_timestamp,
     to_timestamp,
 };
-pub use media::Episode;
+pub use media::{Episode, RegexParser};
