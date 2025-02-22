@@ -19,15 +19,32 @@ pub struct Episode {
 
 impl Episode {
     /// 静态匹配数据
-    pub const PARSERS: [(&str, [usize; 3]); 4] = [
+    pub const PARSERS: [(&str, [usize; 3]); 5] = [
         // 匹配模式 1: /影片/电视剧/医馆笑传/医馆笑传S01.37集.1080P/01.mkv
+        // title: 医馆笑传
+        // season: 1
+        // episode: 37
         (r"^(.*?)/([^/]+)S(\d{2})\.(\d{1,2})集\.(\d{4}P)/(\d{2})\.(\w+)$", [2, 3, 6]),
         // 匹配模式 2: /还珠格格S01.国语中字.无台标.1080P/还珠格格S01E02.mp4
+        // title: 还珠格格
+        // season: 1
+        // episode: 2
         (r"^(.*?)/([^/]+)S(\d{2})E(\d{2})\.(\w+)$", [2, 3, 4]),
         // 匹配模式 3: /Volumes/ZhiTai/影片/电视剧/爱情公寓/S4 (2014) 4K/01.mp4
+        // title: 爱情公寓
+        // season: 4
+        // episode: 1
         (r"^(.*?)/([^/]+)/S(\d{1,2})\s+\(\d{4}\)\s+\d{1,2}K/(\d{2})\.(\w+)$", [2, 3, 4]),
         // 匹配模式 4: /电视剧/龙门镖局/龙门镖局 (2013) 4K/龙门镖局.Longmen.Express.2013.E02.4K.2160p.HEVC.AAC-DHTCLUB.mp4
+        // title: 龙门镖局
+        // season: 固定=1 所以 [2, 0, 3] 中间用 0 表示
+        // episode: 2
         (r"/([^/]+)/([^/]+) \(.*\) .*E(\d{2})", [2, 0, 3]),
+        // 匹配模式 5: /Volumes/Getea/影片/电影/黄渤/疯狂的赛车.2009.01201.mp4
+        // title: 疯狂的赛车
+        // season: 2009
+        // episode: 01201
+        (r"^(.*?)/([^/]+)\.(\d{4})\.(\d{5})\.\w+$", [2, 3, 4]),
     ];
 
     /// 从地址中解析剧集信息
@@ -175,6 +192,18 @@ mod tests {
             assert_eq!(ep.title, Some("龙门镖局".to_string()));
             assert_eq!(ep.season, Some(1)); // 默认季数为1
             assert_eq!(ep.episode, Some(2));
+        }
+    }
+
+    #[test]
+    fn test_match_pattern5() {
+        let path = "/Volumes/Getea/影/影/渤/疯狂的赛车.2009.01201.mp4";
+        let item = Episode::from_path(path).unwrap();
+        assert!(item.is_some());
+        if let Some(ep) = item {
+            assert_eq!(ep.title, Some("疯狂的赛车".to_string()));
+            assert_eq!(ep.season, Some(2009));
+            assert_eq!(ep.episode, Some(1201));
         }
     }
 }
