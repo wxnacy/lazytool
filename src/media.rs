@@ -19,7 +19,7 @@ pub struct Episode {
 
 impl Episode {
     /// 静态匹配数据
-    pub const PARSERS: [(&str, [usize; 3]); 6] = [
+    pub const PARSERS: [(&str, [usize; 3]); 7] = [
         // (pattern, indexs)
         // 匹配模式 1: /影片/电视剧/医馆笑传/医馆笑传S01.37集.1080P/01.mkv
         // title: 医馆笑传
@@ -51,6 +51,11 @@ impl Episode {
         // season: 固定=1 indexs 中间用 0 表示
         // episode: 4
         (r"^(.*?)/([^/]+)\.1080P/.*?第(\d{1,2})集\.\w+$", [2, 0, 3]),
+        // 匹配模式 7: /Volumes/ZhiTai/影片/电视剧/怪侠一枝梅.全30集.4K/02.mp4
+        // title: 怪侠一枝梅
+        // season: 固定=1 indexs 中间用 0 表示
+        // episode: 2
+        (r"^(.*?)/([^/]+)\.全\d+集\.\d+K/(\d{2})\.(\w+)$", [2, 0, 3]),
     ];
 
     /// 从地址中解析剧集信息
@@ -225,4 +230,15 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_match_pattern7() {
+        let path = "/Volumes/ZhiTai/影片/电视剧/怪侠一枝梅.全30集.4K/02.mp4";
+        let item = Episode::from_path(path).unwrap();
+        assert!(item.is_some());
+        if let Some(ep) = item {
+            assert_eq!(ep.title, Some("怪侠一枝梅".to_string()));
+            assert_eq!(ep.season, Some(1)); // 默认季数为1
+            assert_eq!(ep.episode, Some(2));
+        }
+    }
 }
